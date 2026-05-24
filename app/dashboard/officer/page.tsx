@@ -543,7 +543,7 @@ export default function OfficerDashboard() {
               openCreateEvent={openCreateEvent}
               openEditEvent={openEditEvent}
               deleteEvent={(id: string) =>
-                deleteEventService(id, loadDashboard)
+                deleteEventService(id, organization, loadDashboard)
               }
             />
           )}
