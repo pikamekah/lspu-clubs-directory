@@ -38,7 +38,9 @@ type OrganizationRules = {
 type ExistingAcademicApplication = {
   id: string;
   status?: string;
+  org_id?: string;
   organizations?: {
+    name?: string;
     department?: string;
     category?: string;
     is_academic?: boolean;
@@ -126,14 +128,25 @@ export default function JoinForm({
   }, [loadData]);
 
   function isNonAcademicOrg(
-    org?: OrganizationRules | ExistingAcademicApplication["organizations"]
+    org?: OrganizationRules | ExistingAcademicApplication["organizations"] | null
   ) {
-    const department = String(
-      org?.department || org?.category || orgDepartment || ""
-    ).toUpperCase();
+    const department = String(org?.department || org?.category || "").toUpperCase();
 
     return (
       org?.is_academic === false ||
+      department === "NON-ACAD" ||
+      department === "NON-ACADEMIC" ||
+      department === "NON ACADEMIC"
+    );
+  }
+
+  function isCurrentOrgNonAcademic() {
+    const department = String(
+      orgData?.department || orgData?.category || orgDepartment || ""
+    ).toUpperCase();
+
+    return (
+      orgData?.is_academic === false ||
       department === "NON-ACAD" ||
       department === "NON-ACADEMIC" ||
       department === "NON ACADEMIC"
@@ -165,7 +178,7 @@ export default function JoinForm({
       return;
     }
 
-    const isNonAcad = isNonAcademicOrg(orgData);
+    const isNonAcad = isCurrentOrgNonAcademic();
 
     const { data: existingApplication, error: checkError } = await supabase
       .from("members")
@@ -205,19 +218,36 @@ export default function JoinForm({
         return;
       }
 
-      const { data: existingAcademicApplications } = await supabase
-        .from("members")
-        .select("id, status, organizations(department, category, is_academic)")
-        .eq("user_id", user.id)
-        .neq("status", "rejected");
+      const {
+  data: existingAcademicApplications,
+  error: academicCheckError,
+} = await supabase
+  .from("members")
+  .select("id, status, org_id, organizations(name, department, category, is_academic)")
+  .eq("user_id", user.id)
+  .in("status", ["pending", "approved"]);
 
-      const alreadyHasAcademic = (
+if (academicCheckError) {
+  console.error("Academic organization check error:", academicCheckError);
+  setNotice("Could not verify your current academic organization membership. Please try again.");
+  setSubmitting(false);
+  return;
+}
+
+      const existingAcademic = (
         existingAcademicApplications as ExistingAcademicApplication[] | null
-      )?.some((item) => !isNonAcademicOrg(item.organizations));
+      )?.find((item) => {
+        if (item.org_id === orgId) return false;
 
-      if (alreadyHasAcademic) {
+        return !isNonAcademicOrg(item.organizations);
+      });
+
+      if (existingAcademic) {
+        const existingOrgName =
+          existingAcademic.organizations?.name || "another academic organization";
+
         setNotice(
-          "You already joined or applied to one academic organization.\n\nYou may still join non-academic organizations."
+          `You already joined or applied to ${existingOrgName}.\n\nStudents can only have one pending or approved academic organization.\n\nYou may still join non-academic organizations.`
         );
 
         setSubmitting(false);
